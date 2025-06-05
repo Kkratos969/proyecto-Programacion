@@ -1,15 +1,3 @@
-S'ha obert la conversa. Conté un missatge no llegit. 
-
-Ves al contingut
-Utilitza Correu de IES Quartó del Rei amb lectors de pantalla
-1 de 541
-proyecto
-Safata d'entrada
-
-RAFAEL ORTIZ ORTIZ
-12:25 (fa 0 minuts)
-per a mi
-
 #include <windows.h>
 #include <tlhelp32.h>
 #include <stdio.h>
