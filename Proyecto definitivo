@@ -1,0 +1,170 @@
+S'ha obert la conversa. Conté un missatge no llegit. 
+
+Ves al contingut
+Utilitza Correu de IES Quartó del Rei amb lectors de pantalla
+1 de 541
+proyecto
+Safata d'entrada
+
+RAFAEL ORTIZ ORTIZ
+12:25 (fa 0 minuts)
+per a mi
+
+#include <windows.h>
+#include <tlhelp32.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define ID_START_BUTTON 1
+#define ID_TIMER_INPUT  2
+#define ID_CHECKBOX_BASE 100
+
+// Navegadores conocidos
+const char *navegadores[] = {
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "opera.exe",
+    "opera_gx.exe"
+};
+
+const char *nombres[] = {
+    "Google Chrome",
+    "Microsoft Edge",
+    "Mozilla Firefox",
+    "Opera",
+    "Opera GX"
+};
+
+#define NUM_NAV (sizeof(navegadores)/sizeof(navegadores[0]))
+
+HWND checkboxes[NUM_NAV], timerInput;
+
+// Estructura para pasar al hilo
+typedef struct {
+    int seleccion[NUM_NAV];
+    int minutos;
+} BloqueoConfig;
+
+// Verifica si un proceso está en ejecución
+int proceso_en_ejecucion(const char* nombre_proceso) {
+    PROCESSENTRY32 entry = { 0 };
+    entry.dwSize = sizeof(PROCESSENTRY32);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+
+    if (Process32First(snapshot, &entry)) {
+        do {
+            if (_stricmp(entry.szExeFile, nombre_proceso) == 0) {
+                CloseHandle(snapshot);
+                return 1;
+            }
+        } while (Process32Next(snapshot, &entry));
+    }
+
+    CloseHandle(snapshot);
+    return 0;
+}
+
+// Cierra el proceso
+void cerrar_proceso(const char* nombre_proceso) {
+    char cmd[256];
+    sprintf(cmd, "taskkill /F /IM %s >nul 2>&1", nombre_proceso);
+    system(cmd);
+}
+
+// Hilo que bloquea navegadores automáticamente
+DWORD WINAPI bloqueo_automatico(LPVOID lpParam) {
+    BloqueoConfig *cfg = (BloqueoConfig *)lpParam;
+    int duracion = cfg->minutos * 60;
+
+    for (int t = 0; t < duracion; t += 5) {
+        for (int i = 0; i < NUM_NAV; i++) {
+            if (cfg->seleccion[i] && proceso_en_ejecucion(navegadores[i])) {
+                cerrar_proceso(navegadores[i]);
+            }
+        }
+        Sleep(5000);
+    }
+
+    MessageBox(NULL, "? El bloqueo ha finalizado.", "Completado", MB_OK);
+    free(cfg);
+    return 0;
+}
+
+// Manejador de eventos
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_COMMAND:
+        if (LOWORD(wParam) == ID_START_BUTTON) {
+            char buffer[10];
+            GetWindowText(timerInput, buffer, 10);
+            int minutos = atoi(buffer);
+            if (minutos <= 0) {
+                MessageBox(hwnd, "Introduce un tiempo válido en minutos.", "Error", MB_OK | MB_ICONERROR);
+                break;
+            }
+
+            BloqueoConfig *cfg = (BloqueoConfig *)malloc(sizeof(BloqueoConfig));
+            cfg->minutos = minutos;
+            for (int i = 0; i < NUM_NAV; i++) {
+                cfg->seleccion[i] = (SendMessage(checkboxes[i], BM_GETCHECK, 0, 0) == BST_CHECKED);
+            }
+
+            CreateThread(NULL, 0, bloqueo_automatico, (LPVOID)cfg, 0, NULL);
+            MessageBox(hwnd, "?? Bloqueo iniciado. Los navegadores seleccionados se cerrarán automáticamente.", "Bloqueo activo", MB_OK);
+        }
+        break;
+
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    }
+
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+// Función principal
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    const char CLASS_NAME[] = "BloqueadorVentana";
+    WNDCLASS wc = { 0 };
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    RegisterClass(&wc);
+
+    HWND hwnd = CreateWindowEx(
+        0, CLASS_NAME, "Bloqueador de Navegadores", WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 350, 300,
+        NULL, NULL, hInstance, NULL
+    );
+
+    if (hwnd == NULL) return 0;
+
+    CreateWindow("STATIC", "Minutos de bloqueo:", WS_VISIBLE | WS_CHILD, 20, 20, 120, 20, hwnd, NULL, hInstance, NULL);
+    timerInput = CreateWindow("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER, 150, 20, 50, 20, hwnd, (HMENU)(UINT_PTR)ID_TIMER_INPUT, hInstance, NULL);
+
+    for (int i = 0; i < NUM_NAV; i++) {
+        checkboxes[i] = CreateWindow("BUTTON", nombres[i],
+            WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
+            20, 60 + i * 30, 200, 25, hwnd,
+            (HMENU)(UINT_PTR)(ID_CHECKBOX_BASE + i), hInstance, NULL);
+    }
+
+    CreateWindow("BUTTON", "Iniciar bloqueo",
+        WS_VISIBLE | WS_CHILD,
+        100, 220, 120, 30,
+        hwnd, (HMENU)(UINT_PTR)ID_START_BUTTON, hInstance, NULL);
+
+    ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
+
+    MSG msg = { 0 };
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    return 0;
+}
+
